@@ -3,22 +3,22 @@ use serde::{Deserialize, Serialize};
 
 use crate::leads::{ApiError, Lead, Source, invalid};
 
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
 struct Fact {
-    field: &'static str,
+    field: String,
     value: String,
     confidence: f32,
 }
 
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
 pub(crate) struct Brief {
     lead: Lead,
     source: Source,
     facts: Vec<Fact>,
-    unknowns: Vec<&'static str>,
+    unknowns: Vec<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub(crate) struct BriefRequest {
     lead: Lead,
     source: Source,
@@ -39,14 +39,13 @@ pub(crate) struct Variant {
     html: String,
 }
 
-fn brief(request: BriefRequest) -> Result<Brief, ApiError> {
-    if !request.confirmed {
-        return Err(invalid("Confirm the candidate before preparing a brief."));
-    }
-    let lead = request.lead.checked()?;
-    let confidence = match &request.source {
-        Source::Fixture | Source::Operator => 1.0,
-        Source::Osm { reference } => {
+impl BriefRequest {
+    pub(crate) fn checked(mut self) -> Result<Self, ApiError> {
+        if !self.confirmed {
+            return Err(invalid("Confirm the candidate before preparing a brief."));
+        }
+        self.lead = self.lead.checked()?;
+        if let Source::Osm { reference } = &self.source {
             let valid = reference.split_once('/').is_some_and(|(kind, id)| {
                 matches!(kind, "node" | "way" | "relation")
                     && id.parse::<u64>().is_ok_and(|id| id > 0)
@@ -54,8 +53,16 @@ fn brief(request: BriefRequest) -> Result<Brief, ApiError> {
             if !valid {
                 return Err(invalid("The OpenStreetMap reference is invalid."));
             }
-            0.8
         }
+        Ok(self)
+    }
+}
+
+pub(crate) fn brief(request: BriefRequest) -> Result<Brief, ApiError> {
+    let BriefRequest { lead, source, .. } = request.checked()?;
+    let confidence = match source {
+        Source::Fixture | Source::Operator => 1.0,
+        Source::Osm { .. } => 0.8,
     };
     let mut facts = Vec::new();
     let mut unknowns = Vec::new();
@@ -68,10 +75,10 @@ fn brief(request: BriefRequest) -> Result<Brief, ApiError> {
         ("Services", &lead.services),
     ] {
         if value.is_empty() {
-            unknowns.push(field);
+            unknowns.push(field.to_owned());
         } else {
             facts.push(Fact {
-                field,
+                field: field.to_owned(),
                 value: value.clone(),
                 confidence,
             });
@@ -79,7 +86,7 @@ fn brief(request: BriefRequest) -> Result<Brief, ApiError> {
     }
     Ok(Brief {
         lead,
-        source: request.source,
+        source,
         facts,
         unknowns,
     })
@@ -98,10 +105,14 @@ pub(crate) async fn generate(
         ));
     }
     let brief = brief(request.candidate)?;
-    Ok(Json([
-        variant(&brief, "A", "Clean and modern"),
-        variant(&brief, "B", "Bold and local"),
-    ]))
+    Ok(Json(variants(&brief)))
+}
+
+pub(crate) fn variants(brief: &Brief) -> [Variant; 2] {
+    [
+        variant(brief, "A", "Clean and modern"),
+        variant(brief, "B", "Bold and local"),
+    ]
 }
 
 fn escape(value: &str) -> String {
@@ -134,7 +145,7 @@ fn variant(brief: &Brief, id: &'static str, direction: &'static str) -> Variant 
         .facts
         .iter()
         .filter(|fact| {
-            matches!(fact.field, "Services" | "Address" | "Hours")
+            matches!(fact.field.as_str(), "Services" | "Address" | "Hours")
                 || (fact.field == "Phone" && contact.is_empty())
         })
         .map(|fact| {

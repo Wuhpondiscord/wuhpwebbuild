@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import './styles.css'
+import { api } from './api.js'
+import { BriefFacts, PreviewCards } from './preview-components.jsx'
+import { SavedJobs } from './saved-jobs.jsx'
 
 const signals = {
   no_website_listed: 'No website listed',
@@ -11,32 +14,9 @@ const signals = {
 
 const csvExample = 'name,category,phone,address,hours,website,services\n"Example Auto, LLC",Auto repair,(202) 555-0132,"1 Main St, Sample City",,,Brake inspections'
 
-async function api(path, body, signal) {
-  const response = await fetch('/api/v1' + path, body === undefined ? { signal } : {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-    signal,
-  })
-  if (!response.ok) {
-    const error = await response.json().catch(() => null)
-    throw new Error(error?.message ?? `The request failed (HTTP ${response.status}).`)
-  }
-  return response.json()
-}
-
 function sourceLabel(source) {
   if (source.kind === 'osm') return `OpenStreetMap ${source.reference}`
   return source.kind === 'fixture' ? 'Sample fixture' : 'Operator import'
-}
-
-function download(variant) {
-  const url = URL.createObjectURL(new Blob([variant.html], { type: 'text/html' }))
-  const link = document.createElement('a')
-  link.href = url
-  link.download = `concept-${variant.id.toLowerCase()}.html`
-  link.click()
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
 function App() {
@@ -198,13 +178,7 @@ function App() {
                 )}
                 {brief && (
                   <>
-                    <dl className="facts">
-                      {brief.facts.map((fact) => (
-                        <div key={fact.field}><dt>{fact.field}</dt><dd>{fact.value}</dd></div>
-                      ))}
-                    </dl>
-                    <p className="muted">Source confidence {Math.round(brief.facts[0].confidence * 100)}%</p>
-                    {brief.unknowns.length > 0 && <p className="muted">Missing details omitted from previews · {brief.unknowns.join(', ')}</p>}
+                    <BriefFacts brief={brief} />
                     <label className="check">
                       <input type="checkbox" checked={approved} disabled={Boolean(busy)}
                         onChange={(event) => { setApproved(event.target.checked); setVariants([]) }} />
@@ -226,19 +200,10 @@ function App() {
           <section className="previews" aria-labelledby="previews-heading">
             <p className="eyebrow">03 · Compare</p>
             <h2 id="previews-heading">Two concepts, one brief</h2>
-            <div className="workspace">
-              {variants.map((variant) => (
-                <article className="card preview" key={variant.id}>
-                  <div className="card-header">
-                    <div><p className="eyebrow">Site {variant.id}</p><h3>{variant.direction}</h3></div>
-                    <button type="button" className="secondary" onClick={() => download(variant)}>Download HTML</button>
-                  </div>
-                  <iframe title={`Site ${variant.id} · ${variant.direction}`} sandbox="" srcDoc={variant.html} />
-                </article>
-              ))}
-            </div>
+            <PreviewCards variants={variants} />
           </section>
         )}
+        <SavedJobs candidate={request} />
         <footer>
           <span>Session data clears when you reload. Concept previews are generated from fixed templates.</span>
           <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap contributors</a>

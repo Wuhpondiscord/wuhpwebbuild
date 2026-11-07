@@ -10,8 +10,8 @@ pinned: false
 
 # Wuhp Web Build
 
-The first Phase 1 slice of the Lead-to-Launch blueprints. A Rust server serves
-the React workspace and `/health` on port 7860.
+The Phase 1 Lead-to-Launch workspace runs on a Rust server with a React interface
+and a health endpoint at `/health` on port 7860.
 
 ## Try the workflow
 
@@ -23,10 +23,24 @@ the React workspace and `/health` on port 7860.
 
 CSV requires `name` and `category`. Optional columns are `phone`, `address`,
 `hours`, `website`, and `services`. Imports accept up to 200 rows or OSM elements.
-The workspace keeps its state in the open page. This slice uses imported or
-fixture data and fixed templates. Live discovery, persistent jobs and briefs,
-Gemini agents, automated review, hosting generated sites, and analytics are
-still ahead in Phase 1.
+Session demo work clears when you reload.
+
+## Saved jobs
+
+With Postgres and an operator token configured, **Saved jobs** opens a single
+operator workspace. Confirm a candidate, unlock the workspace, and queue the
+lead. The worker saves a sourced brief and waits for approval before it builds
+and saves both previews. Reopen recent jobs after a restart and expand **Job
+history** to see the recorded stages and attempts.
+
+Use a randomly generated `OPERATOR_TOKEN` of 32–256 printable ASCII characters
+with no whitespace. Keep it private and set it in the app's environment. In
+Docker Compose, set the variable in the terminal environment or an ignored
+`.env` file before running `docker compose up --build`. On Hugging Face set both
+`OPERATOR_TOKEN` and a Postgres `DATABASE_URL` reachable from the Space as secrets.
+The public session demo remains available. The workspace currently uses a
+shared operator token and fixed templates. Live discovery, Gemini agents,
+automated reviews, generated-site hosting, and analytics are later slices.
 
 ## Local development
 
@@ -39,8 +53,8 @@ the migrations on startup.
 ## Deployment
 
 Push to GitHub `main`. The **Test and deploy** workflow builds the Docker image,
-checks the React bundle and health endpoint, runs the Phase 1 API smoke test, and confirms the workspace migration
-against Postgres. After the test passes, it uses the GitHub Actions secret
+checks the React bundle and health endpoint, and tests the pipeline, approval
+gate, and interrupted-job recovery against Postgres. After the test passes, it uses the GitHub Actions secret
 `HF_TOKEN` to upload the tested revision to `wuhp/wuhpwebbuild`. The workflow
 waits for the Space to report that revision as healthy. The token needs write
 access to that Space.

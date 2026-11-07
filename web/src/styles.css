@@ -74,3 +74,9 @@ textarea { resize: vertical; }
 .preview iframe { display: block; margin-top: .75rem; height: 29rem; width: 100%; border: 1px solid var(--border); border-radius: .5rem; background: #f6f6f6; }
 footer { display: flex; gap: .5rem 1rem; justify-content: space-between; flex-wrap: wrap; padding: 1.4rem 0; color: var(--muted); font-size: .82rem; }
 @media (max-width: 48rem) { .workspace { grid-template-columns: 1fr; } }
+.saved-jobs { margin-top: 1.2rem; }
+.saved-jobs input[type=password] { width: min(100%, 24rem); padding: .4rem; border: 1px solid #8ea496; border-radius: .4rem; }
+.saved-jobs .muted { margin-bottom: .55rem; }
+.job-list { margin-top: .8rem; }
+.job-detail { border-top: 1px solid var(--border); margin-top: 1rem; padding-top: 1rem; }
+.job-detail .workspace { margin-top: .75rem; }

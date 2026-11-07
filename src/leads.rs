@@ -16,8 +16,12 @@ pub(crate) struct ErrorBody {
 }
 
 pub(crate) fn invalid(message: impl Into<String>) -> ApiError {
+    error(StatusCode::UNPROCESSABLE_ENTITY, message)
+}
+
+pub(crate) fn error(status: StatusCode, message: impl Into<String>) -> ApiError {
     (
-        StatusCode::UNPROCESSABLE_ENTITY,
+        status,
         Json(ErrorBody {
             message: message.into(),
         }),

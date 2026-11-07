@@ -1,3 +1,4 @@
+mod jobs;
 mod leads;
 mod previews;
 mod telemetry;
@@ -82,11 +83,13 @@ async fn main() -> io::Result<()> {
         "not_configured"
     };
     let web_dir = env::var("WEB_DIST").unwrap_or_else(|_| "web/dist".to_owned());
+    let queue = jobs::Queue::start(database.as_ref());
     let pipeline = Router::new()
         .route("/leads/demo", get(leads::demo))
         .route("/leads/import", post(leads::import))
         .route("/brief", post(previews::prepare))
         .route("/previews", post(previews::generate))
+        .merge(jobs::router(queue))
         .layer(DefaultBodyLimit::max(192 * 1024));
     let app = Router::new()
         .nest("/api/v1", pipeline)

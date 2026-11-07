@@ -18,6 +18,7 @@ services:
       - "127.0.0.1:7860:7860"
     environment:
       DATABASE_URL: postgres://app:local-development@db:5432/wuhpwebbuild
+      OPERATOR_TOKEN: ${OPERATOR_TOKEN:-}
     depends_on:
       db:
         condition: service_healthy
