@@ -32,11 +32,12 @@ jobs:
           asset=$(grep -oE 'src="/assets/[^"]+\.js"' /tmp/wuhp-index.html | cut -d '"' -f 2)
           test -n "$asset"
           curl -fsS "$base$asset" > /tmp/wuhp-web.js
-          grep -Fq 'Lead-to-Launch platform foundation' /tmp/wuhp-web.js
+          grep -Fq 'Build a concept from a lead' /tmp/wuhp-web.js
 
           migrated=$(docker compose exec -T db psql -U app -d wuhpwebbuild -At \
             -c "SELECT to_regclass('public.workspaces');")
           test "$migrated" = workspaces
+          python tests/smoke_pipeline.py "$base"
       - name: Show container logs on test failure
         if: failure()
         run: docker compose logs --no-color

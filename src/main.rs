@@ -1,8 +1,15 @@
+mod leads;
+mod previews;
 mod telemetry;
 
 use std::{env, error::Error, io, time::Duration};
 
-use axum::{Json, Router, extract::State, http::StatusCode, routing::get};
+use axum::{
+    Json, Router,
+    extract::{DefaultBodyLimit, State},
+    http::StatusCode,
+    routing::{get, post},
+};
 use serde::Serialize;
 use sqlx::{PgPool, postgres::PgPoolOptions};
 use tower_http::services::ServeDir;
@@ -75,7 +82,14 @@ async fn main() -> io::Result<()> {
         "not_configured"
     };
     let web_dir = env::var("WEB_DIST").unwrap_or_else(|_| "web/dist".to_owned());
+    let pipeline = Router::new()
+        .route("/leads/demo", get(leads::demo))
+        .route("/leads/import", post(leads::import))
+        .route("/brief", post(previews::prepare))
+        .route("/previews", post(previews::generate))
+        .layer(DefaultBodyLimit::max(192 * 1024));
     let app = Router::new()
+        .nest("/api/v1", pipeline)
         .route("/health", get(health))
         .fallback_service(ServeDir::new(web_dir))
         .with_state(database);
