@@ -1,0 +1,51 @@
+name: Hugging Face runtime events
+
+on:
+  workflow_dispatch:
+    inputs:
+      revision:
+        description: GitHub commit running in the Space
+        required: true
+        type: string
+      event:
+        description: Runtime event emitted by the Space
+        required: true
+        type: choice
+        options:
+          - server_started
+          - database_initialization_failed
+
+permissions: {}
+
+run-name: Hugging Face runtime event
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Validate and record the runtime event
+        env:
+          REVISION: ${{ inputs.revision }}
+          EVENT: ${{ inputs.event }}
+        run: |
+          [[ "$REVISION" =~ ^[a-f0-9]{40}$ ]]
+          case "$EVENT" in
+            server_started|database_initialization_failed) ;;
+            *) exit 1 ;;
+          esac
+
+          jq -n --arg space "wuhp/wuhpwebbuild" --arg revision "$REVISION" \
+            --arg event "$EVENT" --arg received_at "$(date -u +%FT%TZ)" \
+            '{$space, $revision, $event, $received_at}' > space-runtime.json
+          cat space-runtime.json
+          {
+            echo '### Hugging Face runtime event'
+            printf 'Event `%s` for revision `%s`.\n' "$EVENT" "$REVISION"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: space-runtime
+          path: space-runtime.json
+          if-no-files-found: error
+          retention-days: 30

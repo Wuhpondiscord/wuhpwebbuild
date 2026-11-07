@@ -1,0 +1,25 @@
+services:
+  db:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: local-development
+      POSTGRES_DB: wuhpwebbuild
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "app", "-d", "wuhpwebbuild"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+  app:
+    build: .
+    ports:
+      - "127.0.0.1:7860:7860"
+    environment:
+      DATABASE_URL: postgres://app:local-development@db:5432/wuhpwebbuild
+    depends_on:
+      db:
+        condition: service_healthy
+volumes:
+  pgdata:

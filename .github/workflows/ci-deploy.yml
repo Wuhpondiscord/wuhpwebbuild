@@ -1,0 +1,102 @@
+name: Test and deploy
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Build and test the Docker application
+        run: |
+          printf '%s\n' "$GITHUB_SHA" > release.txt
+          docker compose up -d --build
+
+          base=http://127.0.0.1:7860
+          curl -fsS --retry 20 --retry-all-errors --retry-delay 2 --max-time 5 "$base/health" \
+            | jq -e --arg revision "$GITHUB_SHA" \
+              '.status == "ok" and .database == "ready" and .revision == $revision'
+
+          curl -fsS "$base/" > /tmp/wuhp-index.html
+          grep -F '<title>Wuhp Web Build</title>' /tmp/wuhp-index.html
+          asset=$(grep -oE 'src="/assets/[^"]+\.js"' /tmp/wuhp-index.html | cut -d '"' -f 2)
+          test -n "$asset"
+          curl -fsS "$base$asset" > /tmp/wuhp-web.js
+          grep -Fq 'Lead-to-Launch platform foundation' /tmp/wuhp-web.js
+
+          migrated=$(docker compose exec -T db psql -U app -d wuhpwebbuild -At \
+            -c "SELECT to_regclass('public.workspaces');")
+          test "$migrated" = workspaces
+      - name: Show container logs on test failure
+        if: failure()
+        run: docker compose logs --no-color
+      - name: Stop test containers
+        if: always()
+        run: docker compose down -v
+
+  deploy:
+    name: Deploy tested revision to Hugging Face
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: hugging-face-wuhpwebbuild
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Check that this revision is still current
+        id: revision
+        run: |
+          latest=$(git ls-remote --exit-code origin refs/heads/main | cut -f 1)
+          if [[ "$latest" != "$GITHUB_SHA" ]]; then
+            echo "A newer commit is on main. Skipping deployment of $GITHUB_SHA."
+            exit 0
+          fi
+          printf '%s\n' "$GITHUB_SHA" > release.txt
+          echo "current=true" >> "$GITHUB_OUTPUT"
+      - name: Install Hugging Face CLI
+        if: steps.revision.outputs.current == 'true'
+        run: python -m pip install 'hf==1.9.2'
+      - name: Upload source to the existing Docker Space
+        if: steps.revision.outputs.current == 'true'
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          if [[ -z "$HF_TOKEN" ]]; then
+            echo "::error::Set the HF_TOKEN repository secret with write access to wuhp/wuhpwebbuild."
+            exit 1
+          fi
+          source=$(mktemp -d)
+          git archive "$GITHUB_SHA" -- . ':!.github' ':!.gitignore' | tar -x -C "$source"
+          cp release.txt "$source/release.txt"
+          hf upload wuhp/wuhpwebbuild "$source" --type space \
+            --commit-message "Deploy GitHub revision $GITHUB_SHA"
+      - name: Verify the deployed revision is healthy
+        if: steps.revision.outputs.current == 'true'
+        run: |
+          base=https://wuhp-wuhpwebbuild.hf.space
+          for attempt in {1..45}; do
+            if curl -fsS --max-time 8 "$base/health" \
+              | jq -e --arg revision "$GITHUB_SHA" \
+                '.status == "ok" and .revision == $revision' > /dev/null; then
+              echo "Space is serving tested revision $GITHUB_SHA."
+              exit 0
+            fi
+            sleep 15
+          done
+          curl -fsS --max-time 10 https://huggingface.co/api/spaces/wuhp/wuhpwebbuild/runtime | jq . || true
+          echo "::error::The Space did not serve the tested revision within the verification window."
+          exit 1
